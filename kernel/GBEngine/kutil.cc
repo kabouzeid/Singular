@@ -12745,6 +12745,36 @@ void enterpairsShift (poly h,int k,int ecart,int pos,kStrategy strat, int atR)
       clearS(h,h_sev, &j,&k,strat);
       j++;
     }
+
+    int toInsert = itoInsert(h, strat->tailRing);
+    poly hh = h;
+    for (int i = 1; i <= toInsert; i++)
+    {
+      h = pLPCopyAndShiftLM(hh, i);
+      h_sev = pGetShortExpVector(h);
+      j = pos;
+      loop
+      {
+        if (j > k) break;
+        /* int k_old = k; */
+        clearS(h,h_sev, &j,&k,strat);
+        /* if (k < k_old) PrintS("+++removed from S+++"); */
+        j++;
+      }
+      pLmDelete(h);
+    }
+
+/*     // TEST */
+/*     h = hh; */
+/*     j = pos; */
+/*     loop */
+/*     { */
+/*       if (j > k) break; */
+/*         if (p_LPLmDivisibleBy(h, strat->S[j], currRing)) { */
+/*           PrintS("!!!!!!!!!!!!!!!!!!!!!!!!!ERRRRROR!!!!!!!!!!!!!!!!!!!!!!"); */
+/*         } */
+/*       j++; */
+/*     } */
     //Print("end clearS sl=%d\n",strat->sl);
   }
  // PrintS("end enterpairs\n");
