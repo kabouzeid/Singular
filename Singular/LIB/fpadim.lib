@@ -1829,7 +1829,7 @@ example
   lpKDimCheck(I); // invokes procedure, factor algebra is of infinite Kdimension
 }
 
-proc lpKDim(ideal G, list #)
+proc lpKDim_lib(ideal G, list #)
 "USAGE: lpKDim(G[,degbound, n]); G an ideal, degbound, n optional integers
 RETURN: int, the K-dimension of the factor algebra
 PURPOSE:Compute the K-dimension of a factor algebra, given via an ideal

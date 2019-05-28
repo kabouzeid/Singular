@@ -129,7 +129,7 @@ static BOOLEAN lpVarAt(leftv res, leftv h)
   else return TRUE;
 }
 
-static void _computeStandardWords(ideal words, int n, ideal M, int& last)
+static void _computeNormalWords(ideal words, int n, ideal M, int& last)
 {
   if (n <= 0){
     words->m[0] = pOne();
@@ -137,7 +137,7 @@ static void _computeStandardWords(ideal words, int n, ideal M, int& last)
     return;
   }
 
-  _computeStandardWords(words, n - 1, M, last);
+  _computeNormalWords(words, n - 1, M, last);
 
   int nVars = currRing->isLPring;
 
@@ -170,7 +170,7 @@ static void _computeStandardWords(ideal words, int n, ideal M, int& last)
   last = nVars * last + nVars - 1;
 }
 
-static ideal computeStandardWords(int n, ideal M)
+static ideal computeNormalWords(int n, ideal M)
 {
   int nVars = currRing->isLPring;
 
@@ -179,7 +179,7 @@ static ideal computeStandardWords(int n, ideal M)
     maxElems *= nVars;
   ideal words = idInit(maxElems);
   int last;
-  _computeStandardWords(words, n, M, last);
+  _computeNormalWords(words, n, M, last);
   idSkipZeroes(words);
   return words;
 }
@@ -198,16 +198,16 @@ static intvec* ufnarovskiGraph(ideal G)
   }
   int lV = currRing->isLPring;
 
-  ideal standardWords = computeStandardWords(l, G);
+  ideal normalWords = computeNormalWords(l, G);
 
-  int n = IDELEMS(standardWords);
+  int n = IDELEMS(normalWords);
   intvec* UG = new intvec(n, n, 0);
   for (int i = 0; i < n; i++)
   {
     for (int j = 0; j < n; j++)
     {
-      poly v = standardWords->m[i];
-      poly w = standardWords->m[j];
+      poly v = normalWords->m[i];
+      poly w = normalWords->m[j];
 
       // check whether v*x1 = x2*w (overlap)
       bool overlap = true;
@@ -385,6 +385,91 @@ static int gkDim(const ideal _G)
   return graphGrowth(UG);
 }
 
+// -1 is infinity, -2 is error
+static int kDim(const ideal _G)
+{
+  if (rField_is_Ring(currRing)) {
+      WerrorS("K-Dim not implemented for rings");
+      return -2;
+  }
+
+  for (int i=IDELEMS(_G)-1;i>=0; i--)
+  {
+    if (pGetComp(_G->m[i]) != 0)
+    {
+      WerrorS("K-Dim not implemented for modules");
+      return -2;
+    }
+  }
+
+  ideal G = id_Head(_G, currRing); // G = LM(G) (and copy)
+  idSkipZeroes(G); // remove zeros
+  id_DelLmEquals(G, currRing); // remove duplicates
+
+  // get the min and max deg
+  long minDeg = 0;
+  long maxDeg = 0;
+  for (int i = 0; i < IDELEMS(G); i++)
+  {
+    minDeg = si_min(minDeg, pTotaldegree(G->m[i]));
+    maxDeg = si_max(maxDeg, pTotaldegree(G->m[i]));
+
+    // also check whether G = <1>
+    if (pIsConstantComp(G->m[i]))
+    {
+      WerrorS("K-Dim not defined for 0-ring"); // TODO is it minus infinity ?
+      return -2;
+    }
+  }
+
+  int lV = currRing->isLPring; // |X|
+  int lVPower = 1;
+  long numberOfNormalWords = 1;
+  for (int i = 1; i <= minDeg - 1; i++) // TODO better way to compute the geometric series (\sum_i |X|^i)
+  {
+    lVPower *= lV;
+    numberOfNormalWords += lVPower;
+  }
+
+  ideal sw = id_MaxIdeal(minDeg - 1, currRing);
+  for (int i = minDeg; i <= maxDeg - 1; i++)
+  {
+    numberOfNormalWords += IDELEMS(computeNormalWords(i, G)); // TODO be more efficient
+  }
+
+  // early termination if G \subset X
+  if (maxDeg <= 1)
+  {
+    if (IDELEMS(G) == lV) // V = {1} no edges
+      return numberOfNormalWords;
+    if (IDELEMS(G) == lV - 1) // V = {1} with loop
+      return -1;
+    if (IDELEMS(G) <= lV - 2) // V = {1} with more than one loop
+      return -1;
+  }
+
+  intvec* UG = ufnarovskiGraph(G);
+  if (errorreported || UG == NULL) return -2;
+
+  // compute remaining number of normal words via Ufnarovski graph
+  intvec* UGpower = UG;
+  intvec* nullMat = new intvec(UGpower->rows(), UGpower->cols(), 0);
+  while (!UGpower->compare(nullMat)) // TODO implement simpler zero check
+  {
+    for (int i = 0; i < UGpower->cols() * UGpower->rows(); i++)
+    {
+      numberOfNormalWords += (*UGpower)[i];
+    }
+
+    intvec* _UGpower = UGpower;
+    UGpower = ivMult(UGpower, UG); // TODO avoid creation of new intvec
+    delete _UGpower;
+  }
+
+  // idDelete(&G); // TODO delete?
+
+  return numberOfNormalWords;
+}
 
 static BOOLEAN lpGkDim(leftv res, leftv h)
 {
@@ -395,6 +480,21 @@ static BOOLEAN lpGkDim(leftv res, leftv h)
     ideal G = (ideal) h->Data();
     res->rtyp = INT_CMD;
     res->data = (void*)(long) gkDim(G);
+    if (errorreported) return TRUE;
+    return FALSE;
+  }
+  else return TRUE;
+}
+
+static BOOLEAN lpKDim(leftv res, leftv h)
+{
+  const short t[]={1,IDEAL_CMD};
+  if (iiCheckTypes(h,t,1))
+  {
+    assumeStdFlag(h);
+    ideal G = (ideal) h->Data();
+    res->rtyp = INT_CMD;
+    res->data = (void*)(long) kDim(G);
     if (errorreported) return TRUE;
     return FALSE;
   }
@@ -411,6 +511,7 @@ extern "C" int SI_MOD_INIT(freealgebra)(SModulFunctions* p)
   p->iiAddCproc("freealgebra.so","lpLmDivides",FALSE,lpLmDivides);
   p->iiAddCproc("freealgebra.so","lpVarAt",FALSE,lpVarAt);
   p->iiAddCproc("freealgebra.so","lpGkDim",FALSE,lpGkDim);
+  p->iiAddCproc("freealgebra.so","lpKDim",FALSE,lpGkDim);
 
   p->iiAddCproc("freealgebra.so","stest",TRUE,stest);
   p->iiAddCproc("freealgebra.so","btest",TRUE,btest);
