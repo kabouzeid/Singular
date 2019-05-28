@@ -403,11 +403,15 @@ static int kDim(const ideal _G)
   }
 
   ideal G = id_Head(_G, currRing); // G = LM(G) (and copy)
+  if (TEST_OPT_PROT)
+    Print("%d original generators\n", IDELEMS(G));
   idSkipZeroes(G); // remove zeros
   id_DelLmEquals(G, currRing); // remove duplicates
+  if (TEST_OPT_PROT)
+    Print("%d non-zero unique generators\n", IDELEMS(G));
 
   // get the min and max deg
-  long minDeg = 0;
+  long minDeg = IDELEMS(G) > 0 ? pTotaldegree(G->m[0]) : 0;
   long maxDeg = 0;
   for (int i = 0; i < IDELEMS(G); i++)
   {
@@ -421,7 +425,11 @@ static int kDim(const ideal _G)
       return -2;
     }
   }
+  if (TEST_OPT_PROT)
+    Print("min deg: %ld max deg: %ld\n", minDeg, maxDeg);
 
+  if (TEST_OPT_PROT)
+    Print("computing normal words via geometric series\n");
   int lV = currRing->isLPring; // |X|
   int lVPower = 1;
   long numberOfNormalWords = 1;
@@ -431,10 +439,16 @@ static int kDim(const ideal _G)
     numberOfNormalWords += lVPower;
   }
 
-  ideal sw = id_MaxIdeal(minDeg - 1, currRing);
-  for (int i = minDeg; i <= maxDeg - 1; i++)
+  if (TEST_OPT_PROT)
+    Print("%ld normal words up to deg %ld\n", numberOfNormalWords, minDeg - 1);
+    Print("computing normal words normally\n");
+
+  for (long i = minDeg; i <= maxDeg - 1; i++)
   {
     numberOfNormalWords += IDELEMS(computeNormalWords(i, G)); // TODO be more efficient
+
+    if (TEST_OPT_PROT)
+      Print("%ld normal words up to deg %ld\n", numberOfNormalWords, i);
   }
 
   // early termination if G \subset X
@@ -448,22 +462,30 @@ static int kDim(const ideal _G)
       return -1;
   }
 
+  if (TEST_OPT_PROT)
+    Print("computing normal words via Ufnarovski graph\n");
+
   intvec* UG = ufnarovskiGraph(G);
   if (errorreported || UG == NULL) return -2;
 
   // compute remaining number of normal words via Ufnarovski graph
   intvec* UGpower = UG;
   intvec* nullMat = new intvec(UGpower->rows(), UGpower->cols(), 0);
-  while (!UGpower->compare(nullMat)) // TODO implement simpler zero check
+  long nUGpower = 1;
+  while (UGpower->compare(nullMat) != 0) // TODO implement simpler zero check
   {
     for (int i = 0; i < UGpower->cols() * UGpower->rows(); i++)
     {
       numberOfNormalWords += (*UGpower)[i];
     }
 
+    if (TEST_OPT_PROT)
+      Print("%ld normal words up to deg %ld\n", numberOfNormalWords, maxDeg - 1 + nUGpower);
+
     intvec* _UGpower = UGpower;
     UGpower = ivMult(UGpower, UG); // TODO avoid creation of new intvec
     delete _UGpower;
+    nUGpower++;
   }
 
   // idDelete(&G); // TODO delete?
@@ -500,6 +522,21 @@ static BOOLEAN lpKDim(leftv res, leftv h)
   }
   else return TRUE;
 }
+
+static BOOLEAN lpUfnarovskiGraph(leftv res, leftv h)
+{
+  const short t[]={1,IDEAL_CMD};
+  if (iiCheckTypes(h,t,1))
+  {
+    assumeStdFlag(h);
+    ideal G = (ideal) h->Data();
+    res->rtyp = INTVEC_CMD;
+    res->data = ufnarovskiGraph(G);
+    if (errorreported) return TRUE;
+    return FALSE;
+  }
+  else return TRUE;
+}
 #endif
 
 //------------------------------------------------------------------------
@@ -511,8 +548,10 @@ extern "C" int SI_MOD_INIT(freealgebra)(SModulFunctions* p)
   p->iiAddCproc("freealgebra.so","lpLmDivides",FALSE,lpLmDivides);
   p->iiAddCproc("freealgebra.so","lpVarAt",FALSE,lpVarAt);
   p->iiAddCproc("freealgebra.so","lpGkDim",FALSE,lpGkDim);
-  p->iiAddCproc("freealgebra.so","lpKDim",FALSE,lpGkDim);
+  p->iiAddCproc("freealgebra.so","lpKDim",FALSE,lpKDim);
+  p->iiAddCproc("freealgebra.so","lpUfnarovskiGraph",FALSE,lpUfnarovskiGraph);
 
+  // library private methods
   p->iiAddCproc("freealgebra.so","stest",TRUE,stest);
   p->iiAddCproc("freealgebra.so","btest",TRUE,btest);
 #endif
