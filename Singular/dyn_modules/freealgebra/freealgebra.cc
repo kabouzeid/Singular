@@ -129,17 +129,33 @@ static BOOLEAN lpVarAt(leftv res, leftv h)
   else return TRUE;
 }
 
-static void _computeNormalWords(ideal words, int n, ideal M, int& last)
+// returns:
+// ATTENTION:
+//  - words contains the words normal modulo M of length n
+//  - numberOfNormalWords contains the number of words normal modulo M of length 0 ... n
+static void _computeNormalWords(ideal words, int& numberOfNormalWords, int n, ideal M, int minDeg, int& last)
 {
   if (n <= 0){
-    words->m[0] = pOne();
-    last = 0;
+    poly one = pOne();
+    if (p_LPDivisibleBy(M, one, currRing)) // 1 \in M => no normal words at all
+    {
+      pDelete(&one);
+      last = -1;
+      numberOfNormalWords = 0;
+    }
+    else
+    {
+      words->m[0] = one;
+      last = 0;
+      numberOfNormalWords = 1;
+    }
     return;
   }
 
-  _computeNormalWords(words, n - 1, M, last);
+  _computeNormalWords(words, numberOfNormalWords, n - 1, M, minDeg, last);
 
   int nVars = currRing->isLPring;
+  int numberOfNewNormalWords = 0;
 
   for (int j = nVars - 1; j >= 0; j--)
   {
@@ -158,30 +174,62 @@ static void _computeNormalWords(ideal words, int n, ideal M, int& last)
         pSetm(words->m[index]);
         pTest(words->m[index]);
 
-        if (p_LPDivisibleBy(M, words->m[index], currRing))
+        if (n >= minDeg && p_LPDivisibleBy(M, words->m[index], currRing))
         {
           pDelete(&words->m[index]);
           words->m[index] = NULL;
+        }
+        else
+        {
+          numberOfNewNormalWords++;
         }
       }
     }
   }
 
   last = nVars * last + nVars - 1;
+
+  numberOfNormalWords += numberOfNewNormalWords;
 }
 
-static ideal computeNormalWords(int n, ideal M)
+static ideal computeNormalWords(int length, ideal M)
 {
+  long minDeg = IDELEMS(M) > 0 ? pTotaldegree(M->m[0]) : 0;
+  for (int i = 1; i < IDELEMS(M); i++)
+  {
+    minDeg = si_min(minDeg, pTotaldegree(M->m[i]));
+  }
+
   int nVars = currRing->isLPring;
 
   int maxElems = 1;
-  for (int i = 0; i < n; i++) // maxElems = nVars^n
+  for (int i = 0; i < length; i++) // maxElems = nVars^n
     maxElems *= nVars;
   ideal words = idInit(maxElems);
-  int last;
-  _computeNormalWords(words, n, M, last);
+  int last, numberOfNormalWords;
+  _computeNormalWords(words, numberOfNormalWords, length, M, minDeg, last);
   idSkipZeroes(words);
   return words;
+}
+
+static int countNormalWords(int upToLength, ideal M)
+{
+  long minDeg = IDELEMS(M) > 0 ? pTotaldegree(M->m[0]) : 0;
+  for (int i = 1; i < IDELEMS(M); i++)
+  {
+    minDeg = si_min(minDeg, pTotaldegree(M->m[i]));
+  }
+
+  int nVars = currRing->isLPring;
+
+  int maxElems = 1;
+  for (int i = 0; i < upToLength; i++) // maxElems = nVars^n
+    maxElems *= nVars;
+  ideal words = idInit(maxElems);
+  int last, numberOfNormalWords;
+  _computeNormalWords(words, numberOfNormalWords, upToLength, M, minDeg, last);
+  idDelete(&words);
+  return numberOfNormalWords;
 }
 
 // NULL if graph is undefined
@@ -410,12 +458,10 @@ static int kDim(const ideal _G)
   if (TEST_OPT_PROT)
     Print("%d non-zero unique generators\n", IDELEMS(G));
 
-  // get the min and max deg
-  long minDeg = IDELEMS(G) > 0 ? pTotaldegree(G->m[0]) : 0;
+  // get the max deg
   long maxDeg = 0;
   for (int i = 0; i < IDELEMS(G); i++)
   {
-    minDeg = si_min(minDeg, pTotaldegree(G->m[i]));
     maxDeg = si_max(maxDeg, pTotaldegree(G->m[i]));
 
     // also check whether G = <1>
@@ -426,31 +472,19 @@ static int kDim(const ideal _G)
     }
   }
   if (TEST_OPT_PROT)
-    Print("min deg: %ld max deg: %ld\n", minDeg, maxDeg);
+    Print("max deg: %ld\n", maxDeg);
 
-  if (TEST_OPT_PROT)
-    Print("computing normal words via geometric series\n");
-  int lV = currRing->isLPring; // |X|
-  int lVPower = 1;
-  long numberOfNormalWords = 1;
-  for (int i = 1; i <= minDeg - 1; i++) // TODO better way to compute the geometric series (\sum_i |X|^i)
-  {
-    lVPower *= lV;
-    numberOfNormalWords += lVPower;
-  }
 
+  // for normal words of length minDeg ... maxDeg-1
+  // brute-force the normal words
   if (TEST_OPT_PROT)
-    Print("%ld normal words up to deg %ld\n", numberOfNormalWords, minDeg - 1);
     Print("computing normal words normally\n");
+  long numberOfNormalWords = countNormalWords(maxDeg - 1, G);
 
-  for (long i = minDeg; i <= maxDeg - 1; i++)
-  {
-    numberOfNormalWords += IDELEMS(computeNormalWords(i, G)); // TODO be more efficient
+  if (TEST_OPT_PROT)
+    Print("%ld normal words up to length %ld\n", numberOfNormalWords, maxDeg - 1);
 
-    if (TEST_OPT_PROT)
-      Print("%ld normal words up to deg %ld\n", numberOfNormalWords, i);
-  }
-
+  int lV = currRing->isLPring; // |X|
   // early termination if G \subset X
   if (maxDeg <= 1)
   {
@@ -463,27 +497,38 @@ static int kDim(const ideal _G)
   }
 
   if (TEST_OPT_PROT)
-    Print("computing normal words via Ufnarovski graph\n");
+    Print("computing Ufnarovski graph\n");
 
   intvec* UG = ufnarovskiGraph(G);
   if (errorreported || UG == NULL) return -2;
 
-  // compute remaining number of normal words via Ufnarovski graph
+  // for normal words of length >= maxDeg
+  // use Ufnarovski graph
+  if (TEST_OPT_PROT)
+    Print("computing normal words via Ufnarovski graph (%dx%d)\n", UG->rows(), UG->cols());
   intvec* UGpower = UG;
   intvec* nullMat = new intvec(UGpower->rows(), UGpower->cols(), 0);
   long nUGpower = 1;
   while (UGpower->compare(nullMat) != 0) // TODO implement simpler zero check
   {
+
+    if (TEST_OPT_PROT)
+      Print("Start count graph entries\n");
     for (int i = 0; i < UGpower->cols() * UGpower->rows(); i++)
     {
       numberOfNormalWords += (*UGpower)[i];
     }
 
     if (TEST_OPT_PROT)
+      Print("Done count graph entries\n");
       Print("%ld normal words up to deg %ld\n", numberOfNormalWords, maxDeg - 1 + nUGpower);
 
     intvec* _UGpower = UGpower;
+    if (TEST_OPT_PROT)
+      Print("Start mat mult\n");
     UGpower = ivMult(UGpower, UG); // TODO avoid creation of new intvec
+    if (TEST_OPT_PROT)
+      Print("Done mat mult\n");
     delete _UGpower;
     nUGpower++;
   }
