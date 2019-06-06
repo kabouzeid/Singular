@@ -433,6 +433,120 @@ static int gkDim(const ideal _G)
   return graphGrowth(UG);
 }
 
+// converts an intvec matrix to a vector<vector<int>>
+static std::vector<std::vector<int>> iv2vv(intvec* M)
+{
+  int rows = M->rows();
+  int cols = M->cols();
+
+  std::vector<std::vector<int>> mat(rows, std::vector<int>(cols));
+
+  for (int i = 0; i < rows; i++)
+  {
+    for (int j = 0; j < cols; j++)
+    {
+      mat[i][j] = IMATELEM(*M, i + 1, j + 1);
+    }
+  }
+
+  return mat;
+}
+
+static void vvPrint(const std::vector<std::vector<int>>& mat)
+{
+  for (int i = 0; i < mat.size(); i++)
+  {
+    for (int j = 0; j < mat[i].size(); j++)
+    {
+      Print("%d ", mat[i][j]);
+    }
+    PrintLn();
+  }
+}
+
+static void vvTest(const std::vector<std::vector<int>>& mat)
+{
+  if (mat.size() > 0)
+  {
+    int cols = mat[0].size();
+    for (int i = 1; i < mat.size(); i++)
+    {
+      if (cols != mat[i].size())
+        WerrorS("number of cols in matrix inconsistent");
+    }
+  }
+}
+
+static void vvDeleteRow(std::vector<std::vector<int>>& mat, int row)
+{
+  mat.erase(mat.begin() + row);
+}
+
+static void vvDeleteColumn(std::vector<std::vector<int>>& mat, int col)
+{
+  for (int i = 0; i < mat.size(); i++)
+  {
+    mat[i].erase(mat[i].begin() + col);
+  }
+}
+
+static BOOLEAN vvIsRowZero(const std::vector<std::vector<int>>& mat, int row)
+{
+  for (int i = 0; i < mat[row].size(); i++)
+  {
+    if (mat[row][i] != 0)
+      return FALSE;
+  }
+  return TRUE;
+}
+
+static BOOLEAN vvIsColumnZero(const std::vector<std::vector<int>>& mat, int col)
+{
+  for (int i = 0; i < mat.size(); i++)
+  {
+    if (mat[i][col] != 0)
+      return FALSE;
+  }
+  return TRUE;
+}
+
+static BOOLEAN vvIsZero(const std::vector<std::vector<int>>& mat)
+{
+  for (int i = 0; i < mat.size(); i++)
+  {
+    if (!vvIsRowZero(mat, i))
+      return FALSE;
+  }
+  return TRUE;
+}
+
+static std::vector<std::vector<int>> vvMult(const std::vector<std::vector<int>>& a, const std::vector<std::vector<int>>& b)
+{
+  int ra = a.size();
+  int rb = b.size();
+  int ca = a.size() > 0 ? a[0].size() : 0;
+  int cb = b.size() > 0 ? b[0].size() : 0;
+
+  if (ca != rb)
+  {
+    WerrorS("matrix dimensions do not match");
+    return std::vector<std::vector<int>>();
+  }
+
+  std::vector<std::vector<int>> res(ra, std::vector<int>(cb));
+  for (int i = 0; i < ra; i++)
+  {
+    for (int j = 0; j < cb; j++)
+    {
+      int sum = 0;
+      for (int k = 0; k < ca; k++)
+        sum += a[i][k] * b[k][j];
+      res[i][j] = sum;
+    }
+  }
+  return res;
+}
+
 // -1 is infinity, -2 is error
 static int kDim(const ideal _G)
 {
@@ -502,34 +616,50 @@ static int kDim(const ideal _G)
   intvec* UG = ufnarovskiGraph(G);
   if (errorreported || UG == NULL) return -2;
 
+  if (TEST_OPT_PROT)
+    Print("Ufnarovski graph is %dx%d \n", UG->rows(), UG->cols());
+  std::vector<std::vector<int>> vvUG = iv2vv(UG);
+  for (int i = 0; i < vvUG.size(); i++)
+  {
+    if (vvIsRowZero(vvUG, i) && vvIsColumnZero(vvUG, i)) // i is isolated vertex
+    {
+      vvDeleteRow(vvUG, i);
+      vvDeleteColumn(vvUG, i);
+      i--;
+    }
+  }
+  if (TEST_OPT_PROT)
+    Print("Simplified Ufnarovski graph to %ldx%ld\n", vvUG.size(), vvUG.size());
+
   // for normal words of length >= maxDeg
   // use Ufnarovski graph
   if (TEST_OPT_PROT)
-    Print("computing normal words via Ufnarovski graph (%dx%d)\n", UG->rows(), UG->cols());
-  intvec* UGpower = UG;
-  intvec* nullMat = new intvec(UGpower->rows(), UGpower->cols(), 0);
+    Print("computing normal words via Ufnarovski graph\n");
+  std::vector<std::vector<int>> UGpower = vvUG;
   long nUGpower = 1;
-  while (UGpower->compare(nullMat) != 0) // TODO implement simpler zero check
+  while (!vvIsZero(UGpower))
   {
-
     if (TEST_OPT_PROT)
       Print("Start count graph entries\n");
-    for (int i = 0; i < UGpower->cols() * UGpower->rows(); i++)
+    for (int i = 0; i < UGpower.size(); i++)
     {
-      numberOfNormalWords += (*UGpower)[i];
+      for (int j = 0; j < UGpower[i].size(); j++)
+      {
+        numberOfNormalWords += UGpower[i][j];
+      }
     }
 
     if (TEST_OPT_PROT)
+    {
       Print("Done count graph entries\n");
-      Print("%ld normal words up to deg %ld\n", numberOfNormalWords, maxDeg - 1 + nUGpower);
+      Print("%ld normal words up to length %ld\n", numberOfNormalWords, maxDeg - 1 + nUGpower);
+    }
 
-    intvec* _UGpower = UGpower;
     if (TEST_OPT_PROT)
       Print("Start mat mult\n");
-    UGpower = ivMult(UGpower, UG); // TODO avoid creation of new intvec
+    UGpower = vvMult(UGpower, vvUG); // TODO avoid creation of new intvec
     if (TEST_OPT_PROT)
       Print("Done mat mult\n");
-    delete _UGpower;
     nUGpower++;
   }
 
