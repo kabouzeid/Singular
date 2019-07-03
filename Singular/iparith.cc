@@ -1011,21 +1011,22 @@ static BOOLEAN jjTIMES_P(leftv res, leftv u, leftv v)
   poly b;
   if (v->next==NULL)
   {
-    a=(poly)u->CopyD(POLY_CMD); // works also for VECTOR_CMD
     if (u->next==NULL)
     {
-      b=(poly)v->CopyD(POLY_CMD); // works also for VECTOR_CMD
+      a=(poly)u->Data(); // works also for VECTOR_CMD
+      b=(poly)v->Data(); // works also for VECTOR_CMD
       if ((a!=NULL) && (b!=NULL)
       && ((long)pTotaldegree(a)>si_max((long)rVar(currRing),(long)currRing->bitmask/2)-(long)pTotaldegree(b)))
       {
         Warn("possible OVERFLOW in mult(d=%ld, d=%ld, max=%ld)",
           pTotaldegree(a),pTotaldegree(b),currRing->bitmask/2);
       }
-      res->data = (char *)(pMult( a, b));
+      res->data = (char *)(pp_Mult_qq( a, b, currRing));
       pNormalize((poly)res->data);
       return FALSE;
     }
     // u->next exists: copy v
+    a=(poly)u->CopyD(POLY_CMD); // works also for VECTOR_CMD
     b=pCopy((poly)v->Data());
     if ((a!=NULL) && (b!=NULL)
     && (pTotaldegree(a)+pTotaldegree(b)>si_max((long)rVar(currRing),(long)currRing->bitmask/2)))
@@ -4958,6 +4959,11 @@ static BOOLEAN jjROWS_IV(leftv res, leftv v)
 static BOOLEAN jjRPAR(leftv res, leftv v)
 {
   res->data = (char *)(long)rPar(((ring)v->Data()));
+  return FALSE;
+}
+static BOOLEAN jjS2I(leftv res, leftv v)
+{
+  res->data = (char *)(long)atoi((char*)v->Data());
   return FALSE;
 }
 static BOOLEAN jjSLIM_GB(leftv res, leftv u)
