@@ -986,15 +986,12 @@ NOTE: if I = LM(I), then the global dimension is equal the Gelfand
   ideal G1;
   for (int i = 1; i <= size(G); i++) {
     if (ord(G[i]) < 2) { // single variable in LM
-      G1 = insertGenerator(G1,G[i]);
+      G1 = G1 + G[i];
     }
   } kill i;
-  G1 = simplify(G1,2); // remove zero generators
+  G1 = std(simplify(G1,2)); // remove zero generators
 
-  // G = NF(G,G1)
-  for (int i = 1; i <= ncols(G); i++) { // do not use size() here
-    G[i] = lpNF(G[i],G1);
-  } kill i;
+  G = reduce(G, G1);
   G = simplify(G,2); // remove zero generators
 
   // delete variables in LM(G1) from the ring
