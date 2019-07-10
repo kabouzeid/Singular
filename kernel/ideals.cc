@@ -615,11 +615,13 @@ static ideal idPrepare (ideal  h1, tHomog hom, int syzcomp, intvec **w, GbVarian
   for (j=0; j<i; j++)
   {
     p = h2->m[j];
+    // TODO: lpsyz use tag variable
     q = pOne();
     pSetComp(q,syzcomp+1+j);
     pSetmComp(q);
     if (p!=NULL)
     {
+      // TODO: lpsyz use pAddq
       while (pNext(p)) pIter(p);
       p->next = q;
     }
@@ -629,6 +631,7 @@ static ideal idPrepare (ideal  h1, tHomog hom, int syzcomp, intvec **w, GbVarian
 
   idTest(h2);
 
+  // TODO: lpsyz use kStdShift
   ideal h3=NULL;
   if (alg==GbDefault) alg=GbStd;
   if (alg==GbStd)
