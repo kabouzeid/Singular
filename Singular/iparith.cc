@@ -1283,10 +1283,10 @@ static BOOLEAN jjDIV_N(leftv res, leftv u, leftv v)
 }
 static BOOLEAN jjDIV_P(leftv res, leftv u, leftv v)
 {
-  poly q=(poly)v->CopyD();
-  poly p=(poly)(u->CopyD());
-  res->data=(void*)(p_Divide(p /*(poly)(u->CopyD())*/ ,
-                                         q /*(poly)(v->CopyD())*/ ,currRing));
+  poly q=(poly)v->Data();
+  poly p=(poly)(u->Data());
+  res->data=(void*)(pp_Divide(p /*(poly)(u->Data())*/ ,
+                                         q /*(poly)(v->Data())*/ ,currRing));
   if (res->data!=NULL) pNormalize((poly)res->data);
   return errorreported; /*there may be errors in p_Divide: div. ny 0, etc.*/
 }
@@ -1313,7 +1313,7 @@ static BOOLEAN jjDIV_Ma(leftv res, leftv u, leftv v)
                                            q /*(poly)(v->Data())*/, currRing );
       }
       else
-        MATELEM(mm,i,j) = pDivideM(pCopy(MATELEM(m,i,j)),pHead(q));
+        MATELEM(mm,i,j) = pp_DivideM(MATELEM(m,i,j),q,currRing);
     }
   }
   id_Normalize((ideal)mm,currRing);
@@ -5152,6 +5152,16 @@ static BOOLEAN jjSYZYGY(leftv res, leftv v)
   intvec *w=NULL;
   ideal v_id=(ideal)v->Data();
   tHomog hom=testHomog;
+#ifdef HAVE_SHIFTBBA
+  if (rIsLPRing(currRing))
+  {
+    if (currRing->LPncGenCount < IDELEMS(v_id))
+    {
+      Werror("At least %d ncgen variables are needed for this computation.", IDELEMS(v_id));
+      return TRUE;
+    }
+  }
+#endif
   if (ww!=NULL)
   {
     if (idTestHomModule(v_id,currRing->qideal,ww))

@@ -58,7 +58,7 @@ poly singclap_gcd_r ( poly f, poly g, const ring r )
   }
   #ifdef HAVE_FLINT
   #if __FLINT_RELEASE >= 20503
-  if (rField_is_Zp(r) && (r->cf->ch>500))
+  if (rField_is_Zp(r) && (r->cf->ch>10))
   {
     nmod_mpoly_ctx_t ctx;
     if (!convSingRFlintR(ctx,r))
@@ -110,6 +110,7 @@ poly singclap_gcd_r ( poly f, poly g, const ring r )
       res= convFactoryAPSingAP( gcd( F, G ),r );
       prune (a);
       if (!b1) Off(SW_USE_QGCD);
+      if ( rField_is_Zp_a(r)) p_Norm(res,r); // leading coef. 1
     }
     else
     {
@@ -588,6 +589,37 @@ poly singclap_pmult ( poly f, poly g, const ring r )
 poly singclap_pdivide ( poly f, poly g, const ring r )
 {
   poly res=NULL;
+
+  #ifdef HAVE_FLINT
+  #if __FLINT_RELEASE >= 20503
+  /*
+    If the division is not exact, control will pass to factory where the
+    polynomials can be divided using the ordering that factory chooses.
+  */
+  if (rField_is_Zp(r))
+  {
+    nmod_mpoly_ctx_t ctx;
+    if (!convSingRFlintR(ctx,r))
+    {
+      res = Flint_Divide_MP(f,pLength(f),g,pLength(g),ctx,r);
+      if (res != NULL)
+        return res;
+    }
+  }
+  else
+  if (rField_is_Q(r))
+  {
+    fmpq_mpoly_ctx_t ctx;
+    if (!convSingRFlintR(ctx,r))
+    {
+      res = Flint_Divide_MP(f,pLength(f),g,pLength(g),ctx,r);
+      if (res != NULL)
+        return res;
+    }
+  }
+  #endif
+  #endif
+
   On(SW_RATIONAL);
   if (rField_is_Zp(r) || rField_is_Q(r)
   || (rField_is_Zn(r)&&(r->cf->convSingNFactoryN!=ndConvSingNFactoryN)))

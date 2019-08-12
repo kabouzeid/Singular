@@ -95,15 +95,30 @@ number convFlintNSingN (fmpq_t f, const coeffs cf)
 number convFlintNSingN_QQ (fmpq_t f, const coeffs cf)
 {
 #if __FLINT_RELEASE > 20502
+  if (fmpz_is_one(fmpq_denref(f)))
+  {
+    if (fmpz_fits_si(fmpq_numref(f)))
+    {
+      long i=fmpz_get_si(fmpq_numref(f));
+      return n_Init(i,cf);
+    }
+  }
   number z=ALLOC_RNUMBER();
   #if defined(LDEBUG)
   z->debug=123456;
   #endif
-  z->s=0;
   mpz_init(z->z);
-  mpz_init(z->n);
-  fmpq_get_mpz_frac(z->z,z->n,f);
-  n_Normalize(z,cf);
+  if (fmpz_is_one(fmpq_denref(f)))
+  {
+    z->s=3;
+    fmpz_get_mpz(z->z,fmpq_numref(f));
+  }
+  else
+  {
+    z->s=0;
+    mpz_init(z->n);
+    fmpq_get_mpz_frac(z->z,z->n,f);
+  }
   n_Test(z,cf);
   return z;
 #else
@@ -225,10 +240,10 @@ poly convFlintPSingP(fmpq_poly_t f, const ring r)
 {
   int d=fmpq_poly_length(f);
   poly p=NULL;
+  fmpq_t c;
+  fmpq_init(c);
   for(int i=0; i<=d; i++)
   {
-    fmpq_t c;
-    fmpq_init(c);
     fmpq_poly_get_coeff_fmpq(c,f,i);
     number n=convFlintNSingN(c,r->cf);
     poly pp=p_Init(r);
@@ -237,6 +252,7 @@ poly convFlintPSingP(fmpq_poly_t f, const ring r)
     p_Setm(pp,r);
     p=p_Add_q(p,pp,r);
   }
+  fmpq_clear(c);
   p_Test(p,r);
   return p;
 }

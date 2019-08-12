@@ -172,7 +172,8 @@ noinst_HEADERS = $(factory_headers)
 
 libfactory_includedir = ${includedir}/factory
 
-nodist_libfactory_include_HEADERS = factory.h factoryconf.h globaldefs.h
+nodist_libfactory_include_HEADERS = factory.h factoryconf.h
+libfactory_include_HEADERS = globaldefs.h
 
 
 ####################################################
@@ -254,7 +255,7 @@ DISTCLEANFILES =  config.h readcf.cc
 #distclean-local:
 #	-rm -f readcf.cc
 
-.template.h:
+.template.h: $(factory_headers)
 	${srcdir}/bin/makeheader $< $@
 	cp $@ include/factory/
 
